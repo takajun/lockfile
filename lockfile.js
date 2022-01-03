@@ -276,11 +276,22 @@ exports.lockSync = function (path, opts) {
   try {
     var fd = fs.openSync(path, wx)
     locks[path] = fd
-    try { fs.closeSync(fd) } catch (er) {}
+    try { fs.writeSync(fd, String(process.pid), 0, 'ascii'); fs.closeSync(fd) } catch (er) {}
     debug('locked sync!', path, fd)
     return
   } catch (er) {
     if (er.code !== 'EEXIST') return retryThrow(path, opts, er)
+
+    if (os.platform() === 'linux') {
+      try {
+        var pid = fs.readFileSync(path)
+        var fd_pid = fs.opendirSync('/proc/' + pid)
+      } catch {
+        exports.unlockSync(path)
+        return exports.lockSync(path, opts)
+      }
+      fd_pid.closeSync()
+    }
 
     if (opts.stale) {
       var st = fs.statSync(path)
